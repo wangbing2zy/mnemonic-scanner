@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}扫描进度 - 助记词批量扫描工具{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="/" class="btn btn-sm btn-outline-light mb-2"><i class="bi bi-arrow-left me-1"></i>返回仪表盘</a>
+        <h3><i class="bi bi-activity me-2"></i>扫描任务 #{{ job.id }}</h3>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Status Card -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-body text-center py-5">
+                <!-- Status icon -->
+                <div id="statusIcon">
+                    {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+                    <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;" role="status"></div>
+                    {% elif job.status == 'completed' %}
+                    <i class="bi bi-check-circle text-success mb-3" style="font-size:3rem;"></i>
+                    {% elif job.status == 'cancelled' %}
+                    <i class="bi bi-stop-circle text-warning mb-3" style="font-size:3rem;"></i>
+                    {% elif job.status == 'error' %}
+                    <i class="bi bi-x-circle text-danger mb-3" style="font-size:3rem;"></i>
+                    {% else %}
+                    <i class="bi bi-hourglass text-secondary mb-3" style="font-size:3rem;"></i>
+                    {% endif %}
+                </div>
+
+                <h4 id="statusText" class="mb-1">
+                    {% if job.status == 'running_derivation' %}正在派生地址...
+                    {% elif job.status == 'running_checking' %}正在检查余额...
+                    {% elif job.status == 'completed' %}扫描完成！
+                    {% elif job.status == 'cancelled' %}已取消
+                    {% elif job.status == 'error' %}扫描出错
+                    {% else %}等待开始...{% endif %}
+                </h4>
+                <p class="text-muted-light mb-0" id="statusMessage">{{ job.message }}</p>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-bar-chart me-1"></i>扫描进度
+                <span class="badge bg-secondary ms-2" id="progressPct">{{ job.progress }}%</span>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3" style="height:16px;">
+                    <div class="progress-bar {% if job.progress >= 50 %}stage-2{% endif %}"
+                         id="progressBar"
+                         style="width: {{ job.progress }}%;"
+                         role="progressbar">
+                    </div>
+                </div>
+
+                <div class="row text-center g-3">
+                    <div class="col-3">
+                        <div class="fs-4 fw-bold text-light" id="statTotal">{{ job.total }}</div>
+                        <small class="text-muted-light">总计助记词</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-4 fw-bold text-light" id="statDerived">{{ job.derived }}</div>
+                        <small class="text-muted-light">已派生</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-4 fw-bold text-light" id="statChecked">{{ job.checked }}</div>
+                        <small class="text-muted-light">已检查</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-4 fw-bold balance-positive" id="statFound">{{ job.found }}</div>
+                        <small class="text-muted-light">有钱包</small>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <span class="badge bg-secondary" id="phaseLabel">
+                        {% if job.phase == 'derivation' %}🔨 地址派生阶段
+                        {% elif job.phase == 'checking' %}🔍 余额检查阶段
+                        {% elif job.phase == 'done' %}✅ 已完成
+                        {% else %}⏳ 等待中{% endif %}
+                    </span>
+                    <span class="badge bg-info ms-2" id="errorCount" {% if job.errors == 0 %}style="display:none;"{% endif %}>
+                        错误: {{ job.errors }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="text-center mb-4" id="actionButtons">
+            {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+            <button class="btn btn-danger" onclick="stopScan()">
+                <i class="bi bi-stop-fill me-1"></i>停止扫描
+            </button>
+            {% elif job.status == 'completed' %}
+            <a href="/results?job_id={{ job.id }}" class="btn btn-primary">
+                <i class="bi bi-wallet2 me-1"></i>查看结果
+            </a>
+            <a href="/results?job_id={{ job.id }}&fmt=csv" class="btn btn-outline-light ms-2">
+                <i class="bi bi-download me-1"></i>导出 CSV
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Info Sidebar -->
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-info-circle me-1"></i>任务信息</div>
+            <div class="card-body">
+                <table class="table table-dark table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted-light">任务 ID</td>
+                        <td>#{{ job.id }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted-light">目标链</td>
+                        <td>
+                            {% for c in job.chains %}
+                            <span class="badge badge-chain badge-{{ c }}">{{ c|upper }}</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted-light">并发数</td>
+                        <td>{{ job.concurrency }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted-light">创建时间</td>
+                        <td><small>{{ job.created_at[:19] if job.created_at else '-' }}</small></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted-light">开始时间</td>
+                        <td><small id="startedAt">{{ job.started_at[:19] if job.started_at else '未开始' }}</small></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const jobId = {{ job.id }};
+
+// SSE stream for live updates
+function connectSSE() {
+    const evtSource = new EventSource(`/api/scan/${jobId}/stream`);
+
+    evtSource.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            updateUI(data);
+        } catch (e) {
+            console.error('SSE parse error:', e);
+        }
+    };
+
+    evtSource.onerror = function() {
+        console.log('SSE connection closed');
+        evtSource.close();
+    };
+}
+
+function updateUI(data) {
+    // Progress
+    document.getElementById('progressBar').style.width = data.progress + '%';
+    document.getElementById('progressPct').textContent = data.progress + '%';
+
+    // Stats
+    document.getElementById('statTotal').textContent = data.total;
+    document.getElementById('statDerived').textContent = data.derived;
+    document.getElementById('statChecked').textContent = data.checked;
+    document.getElementById('statFound').textContent = data.found;
+    document.getElementById('statusMessage').textContent = data.message;
+
+    if (data.errors > 0) {
+        const errEl = document.getElementById('errorCount');
+        errEl.style.display = 'inline';
+        errEl.textContent = '错误: ' + data.errors;
+    }
+
+    // Phase label
+    const phaseLabels = {
+        'derivation': '🔨 地址派生阶段',
+        'checking': '🔍 余额检查阶段',
+        'done': '✅ 已完成',
+    };
+    document.getElementById('phaseLabel').textContent = phaseLabels[data.phase] || '⏳ ' + data.phase;
+
+    // Status text
+    const statusTexts = {
+        'running_derivation': '正在派生地址...',
+        'running_checking': '正在检查余额...',
+        'completed': '🎉 扫描完成！',
+        'cancelled': '已取消',
+        'error': '扫描出错',
+    };
+    document.getElementById('statusText').textContent = statusTexts[data.status] || data.status;
+
+    // Status icon
+    if (data.status === 'completed') {
+        document.getElementById('statusIcon').innerHTML = '<i class="bi bi-check-circle text-success mb-3" style="font-size:3rem;"></i>';
+    } else if (data.status === 'cancelled') {
+        document.getElementById('statusIcon').innerHTML = '<i class="bi bi-stop-circle text-warning mb-3" style="font-size:3rem;"></i>';
+    } else if (data.status === 'error') {
+        document.getElementById('statusIcon').innerHTML = '<i class="bi bi-x-circle text-danger mb-3" style="font-size:3rem;"></i>';
+    }
+
+    // Started at
+    if (data.started_at) {
+        document.getElementById('startedAt').textContent = data.started_at.slice(0, 19);
+    }
+
+    // Action buttons
+    if (data.status === 'completed') {
+        document.getElementById('actionButtons').innerHTML = `
+            <a href="/results?job_id=${jobId}" class="btn btn-primary">
+                <i class="bi bi-wallet2 me-1"></i>查看结果
+            </a>
+            <a href="/api/results/export?job_id=${jobId}" class="btn btn-outline-light ms-2">
+                <i class="bi bi-download me-1"></i>导出 CSV
+            </a>`;
+    } else if (data.status === 'cancelled' || data.status === 'error') {
+        document.getElementById('actionButtons').innerHTML = `
+            <a href="/upload" class="btn btn-primary">
+                <i class="bi bi-upload me-1"></i>重新上传
+            </a>`;
+    }
+}
+
+// Stop scan
+async function stopScan() {
+    if (!confirm('确定停止扫描？')) return;
+
+    try {
+        await fetch(`/api/scan/${jobId}/stop`, { method: 'POST' });
+    } catch (e) {
+        console.error('Stop failed:', e);
+    }
+}
+
+// Connect SSE on page load
+{% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+connectSSE();
+{% endif %}
+</script>
+{% endblock %}

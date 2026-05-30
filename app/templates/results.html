@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}结果 - 助记词批量扫描工具{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="/" class="btn btn-sm btn-outline-light mb-2"><i class="bi bi-arrow-left me-1"></i>返回</a>
+        <div class="d-flex justify-content-between align-items-center">
+            <h3 class="mb-0"><i class="bi bi-wallet2 me-2"></i>有钱包地址</h3>
+            <div>
+                <a href="/api/results/export?{% if current_job_id %}job_id={{ current_job_id }}&{% endif %}{% if current_chain %}chain={{ current_chain }}&{% endif %}fmt=csv"
+                   class="btn btn-outline-light btn-sm">
+                    <i class="bi bi-download me-1"></i>导出 CSV
+                </a>
+                <a href="/api/results/export?{% if current_job_id %}job_id={{ current_job_id }}&{% endif %}{% if current_chain %}chain={{ current_chain }}&{% endif %}fmt=json"
+                   class="btn btn-outline-light btn-sm ms-1">
+                    <i class="bi bi-download me-1"></i>导出 JSON
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">扫描任务</label>
+                <select name="job_id" class="form-select" onchange="this.form.submit()">
+                    <option value="">全部任务</option>
+                    {% for j in jobs %}{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">链</label>
+                <select name="chain" class="form-select" onchange="this.form.submit()">
+                    <option value="">全部</option>
+                    {% for key, name in chains.items() %}
+                    <option value="{{ key }}" {% if current_chain == key %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>筛选</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list me-1"></i>发现 <strong>{{ data.total }}</strong> 个有钱包地址</span>
+        <span class="text-muted-light small">页 {{ data.page }}/{{ data.total_pages }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if data.results|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-dark table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>链</th>
+                        <th>地址</th>
+                        <th>余额</th>
+                        <th>助记词（前4词）</th>
+                        <th>派生路径</th>
+                        <th>检查时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in data.results %}
+                    <tr>
+                        <td>{{ r.id }}</td>
+                        <td><span class="badge badge-chain badge-{{ r.chain }}">{{ r.chain_name }}</span></td>
+                        <td style="max-width:200px;">
+                            <code style="color:#e0e0e0; font-size:0.85rem; word-break:break-all;">{{ r.address }}</code>
+                            <i class="bi bi-clipboard copy-btn ms-1" onclick="copyText('{{ r.address }}')"></i>
+                        </td>
+                        <td class="balance-positive">{{ r.balance }}</td>
+                        <td><small class="text-muted-light">{{ r.mnemonic }}</small></td>
+                        <td><small class="text-muted-light">{{ r.derivation_path }}</small></td>
+                        <td><small class="text-muted-light">{{ r.last_check[:19] if r.last_check else '-' }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if data.total_pages > 1 %}
+        <div class="d-flex justify-content-center py-3">
+            <nav>
+                <ul class="pagination pagination-sm">
+                    {% if data.page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ data.page - 1 }}{% if current_chain %}&chain={{ current_chain }}{% endif %}{% if current_job_id %}&job_id={{ current_job_id }}{% endif %}">上一页</a>
+                    </li>
+                    {% endif %}
+
+                    {% for p in range(1, data.total_pages + 1) %}
+                        {% if p == data.page %}
+                        <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                        {% elif p <= 3 or p > data.total_pages - 3 or (p >= data.page - 2 and p <= data.page + 2) %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ p }}{% if current_chain %}&chain={{ current_chain }}{% endif %}{% if current_job_id %}&job_id={{ current_job_id }}{% endif %}">{{ p }}</a>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if data.page < data.total_pages %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ data.page + 1 }}{% if current_chain %}&chain={{ current_chain }}{% endif %}{% if current_job_id %}&job_id={{ current_job_id }}{% endif %}">下一页</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted-light"></i>
+            <p class="text-muted-light mt-2">还没有找到有钱包地址</p>
+            <p class="text-muted-light small">请先上传助记词并开始扫描</p>
+            <a href="/upload" class="btn btn-primary">
+                <i class="bi bi-upload me-1"></i>上传助记词
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyText(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        // Flash feedback
+    }).catch(() => {});
+}
+</script>
+{% endblock %}

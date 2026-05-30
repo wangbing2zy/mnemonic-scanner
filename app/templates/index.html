@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}仪表盘 - 助记词批量扫描工具{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h3 class="mb-0"><i class="bi bi-speedometer2 me-2"></i>仪表盘</h3>
+            <div>
+                <a href="/upload" class="btn btn-primary me-2">
+                    <i class="bi bi-upload me-1"></i>上传助记词
+                </a>
+                <a href="/results" class="btn btn-outline-light">
+                    <i class="bi bi-wallet2 me-1"></i>查看结果
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4" id="stats-container">
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="text-muted-light mb-2"><i class="bi bi-file-text fs-4"></i></div>
+                <div class="fs-2 fw-bold text-light" id="stat-total">-</div>
+                <div class="text-muted-light">助记词总数</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="text-muted-light mb-2"><i class="bi bi-check-circle fs-4"></i></div>
+                <div class="fs-2 fw-bold text-light" id="stat-derived">-</div>
+                <div class="text-muted-light">已派生</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="text-muted-light mb-2"><i class="bi bi-clock fs-4"></i></div>
+                <div class="fs-2 fw-bold text-light" id="stat-pending">-</div>
+                <div class="text-muted-light">待处理</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card h-100" style="border-color: #00d4aa;">
+            <div class="card-body text-center">
+                <div class="text-muted-light mb-2"><i class="bi bi-coin fs-4" style="color:#00d4aa;"></i></div>
+                <div class="fs-2 fw-bold" style="color:#00d4aa;" id="stat-found">-</div>
+                <div class="text-muted-light">有钱包地址</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chain Breakdown -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-diagram-3 me-1"></i>各链统计
+            </div>
+            <div class="card-body" id="chain-stats">
+                <div class="text-center text-muted-light py-3">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scan Jobs -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-task me-1"></i>扫描任务历史
+            </div>
+            <div class="card-body">
+                {% if jobs %}
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>状态</th>
+                                <th>目标链</th>
+                                <th>助记词</th>
+                                <th>已派/已查/发现</th>
+                                <th>进度</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in jobs %}
+                            <tr>
+                                <td>#{{ job.id }}</td>
+                                <td>
+                                    {% if job.status == 'completed' %}
+                                    <span class="badge bg-success">完成</span>
+                                    {% elif job.status == 'running_derivation' or job.status == 'running_checking' %}
+                                    <span class="badge bg-primary scanning-pulse">运行中</span>
+                                    {% elif job.status == 'cancelled' %}
+                                    <span class="badge bg-warning text-dark">已取消</span>
+                                    {% elif job.status == 'error' %}
+                                    <span class="badge bg-danger">错误</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ job.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% for c in job.chains %}
+                                    <span class="badge badge-chain badge-{{ c }}">{{ c|upper }}</span>
+                                    {% endfor %}
+                                </td>
+                                <td>{{ job.total }}</td>
+                                <td>{{ job.derived }}/{{ job.checked }}/<span class="balance-positive">{{ job.found }}</span></td>
+                                <td style="width:150px;">
+                                    <div class="progress">
+                                        <div class="progress-bar {% if job.progress >= 50 %}stage-2{% endif %}"
+                                             style="width: {{ job.progress }}%"></div>
+                                    </div>
+                                    <small class="text-muted-light">{{ job.progress }}%</small>
+                                </td>
+                                <td><small class="text-muted-light">{{ job.created_at[:19] if job.created_at else '-' }}</small></td>
+                                <td>
+                                    {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+                                    <a href="/scan/{{ job.id }}" class="btn btn-sm btn-outline-light">查看</a>
+                                    {% elif job.status == 'completed' %}
+                                    <a href="/results?job_id={{ job.id }}" class="btn btn-sm btn-outline-light">结果</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox fs-1 text-muted-light"></i>
+                    <p class="text-muted-light mt-2 mb-3">还没有扫描任务</p>
+                    <a href="/upload" class="btn btn-primary">
+                        <i class="bi bi-upload me-1"></i>上传助记词开始
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load stats on page load
+async function loadStats() {
+    try {
+        const resp = await fetch('/api/stats');
+        const stats = await resp.json();
+
+        document.getElementById('stat-total').textContent = stats.mnemonics.total;
+        document.getElementById('stat-derived').textContent = stats.mnemonics.derived;
+        document.getElementById('stat-pending').textContent = stats.mnemonics.pending;
+        document.getElementById('stat-found').textContent = stats.addresses.found;
+
+        // Chain breakdown
+        const chainDiv = document.getElementById('chain-stats');
+        const chainKeys = Object.keys(stats.chains);
+        if (chainKeys.length === 0) {
+            chainDiv.innerHTML = '<div class="text-center text-muted-light py-3">暂无数据，上传助记词后开始扫描</div>';
+        } else {
+            let html = '<div class="row g-2">';
+            for (const [key, info] of Object.entries(stats.chains)) {
+                html += `
+                    <div class="col-md-3 col-6">
+                        <div class="d-flex align-items-center p-2 rounded" style="background:rgba(255,255,255,0.03);">
+                            <span class="badge-chain badge-${key} me-2">${key.toUpperCase()}</span>
+                            <div>
+                                <small class="text-muted-light">${info.name}</small><br>
+                                <strong>${info.addresses}</strong>
+                                <small class="text-muted-light">地址</small>
+                                ${info.found > 0 ? `<span class="balance-positive ms-1">${info.found} 有钱包</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            chainDiv.innerHTML = html;
+        }
+    } catch (e) {
+        console.error('Failed to load stats:', e);
+    }
+}
+
+loadStats();
+
+// Auto-refresh dashboard every 10 seconds if there are running jobs
+{% if jobs %}
+setInterval(loadStats, 10000);
+{% endif %}
+</script>
+{% endblock %}

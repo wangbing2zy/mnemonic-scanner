@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}上传助记词 - 助记词批量扫描工具{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="/" class="btn btn-sm btn-outline-light mb-2"><i class="bi bi-arrow-left me-1"></i>返回</a>
+        <h3><i class="bi bi-upload me-2"></i>上传助记词</h3>
+        <p class="text-muted-light">上传 .txt 文件，每行一组助记词（12/15/18/21/24个单词）</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Upload Zone -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="upload-zone" id="uploadZone"
+                     onclick="document.getElementById('fileInput').click()">
+                    <div class="icon mb-3"><i class="bi bi-cloud-upload"></i></div>
+                    <h5 class="text-light">拖拽文件到这里，或点击选择</h5>
+                    <p class="text-muted-light mb-0">支持 .txt 格式，最大 {{ max_size }}MB</p>
+                    <p class="text-muted-light"><small>每行一组助记词，12或24个单词</small></p>
+                    <input type="file" id="fileInput" accept=".txt" style="display:none;">
+                </div>
+                <div id="upload-status" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- File Preview -->
+        <div class="card" id="previewCard" style="display:none;">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-eye me-1"></i>文件预览</span>
+                <span id="fileInfo" class="badge bg-secondary"></span>
+            </div>
+            <div class="card-body">
+                <pre id="previewContent" class="mb-0" style="max-height:200px; overflow-y:auto; color:#8888aa; font-size:0.85rem;"></pre>
+            </div>
+        </div>
+
+        <!-- Scan Config (shown after upload) -->
+        <div class="card mt-4" id="scanConfig" style="display:none;">
+            <div class="card-header">
+                <i class="bi bi-gear me-1"></i>配置扫描参数
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">选择目标链（至少选一个）</label>
+                    <div class="row g-2" id="chainSelector">
+                        {% for key, name in chains.items() %}
+                        <div class="col-md-3 col-6">
+                            <div class="card chain-select-card text-center p-2 selected" data-chain="{{ key }}"
+                                 onclick="toggleChain(this)">
+                                <div class="py-1">
+                                    <span class="badge-chain badge-{{ key }}">{{ key|upper }}</span>
+                                    <small class="d-block mt-1 text-muted-light">{{ name }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">并发数</label>
+                        <select class="form-select" id="concurrency">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                        <small class="text-muted-light">并发太高可能被 API 限流</small>
+                    </div>
+                </div>
+
+                <button class="btn btn-primary btn-lg mt-3" onclick="startScan()">
+                    <i class="bi bi-play-fill me-1"></i>开始扫描
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Instructions -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-info-circle me-1"></i>使用说明</div>
+            <div class="card-body">
+                <ol class="mb-0 text-muted-light" style="line-height:2;">
+                    <li>准备 <strong>.txt</strong> 文件，每行一组助记词</li>
+                    <li>支持 12/15/18/21/24 个单词的标准 BIP39 格式</li>
+                    <li>上传后选择要检查的区块链</li>
+                    <li>点击"开始扫描"，实时查看进度</li>
+                    <li>扫描完成后在结果页导出 CSV/JSON</li>
+                </ol>
+                <hr class="text-muted">
+                <p class="text-muted-light small mb-0">
+                    <i class="bi bi-shield-lock me-1"></i>
+                    所有数据仅存储在本服务器，不会外传
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Drag & drop handling
+const zone = document.getElementById('uploadZone');
+const input = document.getElementById('fileInput');
+
+zone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    zone.classList.add('dragover');
+});
+zone.addEventListener('dragleave', () => {
+    zone.classList.remove('dragover');
+});
+zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+        input.files = e.dataTransfer.files;
+        handleFile(e.dataTransfer.files[0]);
+    }
+});
+input.addEventListener('change', () => {
+    if (input.files.length > 0) {
+        handleFile(input.files[0]);
+    }
+});
+
+let uploadedFileName = '';
+
+async function handleFile(file) {
+    if (!file.name.endsWith('.txt')) {
+        alert('仅支持 .txt 文件');
+        return;
+    }
+    uploadedFileName = file.name;
+
+    // Preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n').filter(l => l.trim());
+        const preview = document.getElementById('previewContent');
+        preview.textContent = lines.slice(0, 10).join('\n');
+        if (lines.length > 10) {
+            preview.textContent += `\n... 共 ${lines.length} 行`;
+        }
+        document.getElementById('fileInfo').textContent = `${lines.length} 行, ${(file.size/1024).toFixed(0)}KB`;
+        document.getElementById('previewCard').style.display = 'block';
+    };
+    reader.readAsText(file.slice(0, 5000)); // preview first 5KB
+
+    // Upload
+    const statusDiv = document.getElementById('upload-status');
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-arrow-repeat me-1 spinning"></i> 上传中...</div>';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle me-1"></i> 上传成功！
+                    <strong>导入 ${data.imported}</strong> 组助记词，
+                    跳过 ${data.skipped} 行无效。
+                    待扫描: ${data.pending}
+                </div>`;
+            document.getElementById('scanConfig').style.display = 'block';
+        } else {
+            statusDiv.innerHTML = `<div class="alert alert-danger">${data.detail || '上传失败'}</div>`;
+        }
+    } catch (e) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">上传出错: ${e.message}</div>`;
+    }
+}
+
+// Chain selection
+function toggleChain(el) {
+    el.classList.toggle('selected');
+}
+
+function getSelectedChains() {
+    const cards = document.querySelectorAll('.chain-select-card.selected');
+    return Array.from(cards).map(c => c.dataset.chain);
+}
+
+// Start scan
+async function startScan() {
+    const chains = getSelectedChains();
+    if (chains.length === 0) {
+        alert('请至少选择一条目标链');
+        return;
+    }
+    const concurrency = document.getElementById('concurrency').value;
+
+    const formData = new FormData();
+    formData.append('chains', JSON.stringify(chains));
+    formData.append('concurrency', concurrency);
+
+    const btn = document.querySelector('button[onclick="startScan()"]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 启动中...';
+
+    try {
+        const resp = await fetch('/api/scan/start', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (data.success) {
+            window.location.href = `/scan/${data.job_id}`;
+        } else {
+            alert(data.detail || '启动失败');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>开始扫描';
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>开始扫描';
+    }
+}
+</script>
+{% endblock %}

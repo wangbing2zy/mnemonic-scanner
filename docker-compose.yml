@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  scanner:
+    build: .
+    container_name: mnemonic-scanner
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./.env:/app/.env:ro
+    environment:
+      - TZ=Asia/Shanghai
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          memory: 512M
