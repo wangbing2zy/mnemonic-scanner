@@ -32,6 +32,8 @@ class Settings:
     ARBITRUM_RPC: str = os.getenv("ARBITRUM_RPC", "https://arb1.arbitrum.io/rpc")
     OPTIMISM_RPC: str = os.getenv("OPTIMISM_RPC", "https://mainnet.optimism.io")
 
+    WEMIX_RPC: str = os.getenv("WEMIX_RPC", "https://api.wemix.com")
+
     BLOCKSTREAM_API: str = os.getenv("BLOCKSTREAM_API", "https://blockstream.info/api")
     SOLANA_RPC: str = os.getenv("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
     TRON_GRID_API: str = os.getenv("TRON_GRID_API", "https://api.trongrid.io")
@@ -43,6 +45,7 @@ class Settings:
         "polygon": "Polygon",
         "arbitrum": "Arbitrum",
         "optimism": "Optimism",
+        "wemix": "WEMIX3.0",
         "btc": "Bitcoin",
         "sol": "Solana",
         "trx": "TRON",
@@ -55,6 +58,7 @@ class Settings:
         "polygon": [POLYGON_RPC],
         "arbitrum": [ARBITRUM_RPC],
         "optimism": [OPTIMISM_RPC],
+        "wemix": [WEMIX_RPC],
     }
 
     # Chain BIP44 coin types
@@ -64,13 +68,14 @@ class Settings:
         "polygon": 60,  # Polygon uses same path as ETH
         "arbitrum": 60,
         "optimism": 60,
+        "wemix": 60,
         "btc": 0,
         "sol": 501,
         "trx": 195,
     }
 
     # Which chains are EVM-compatible
-    EVM_CHAINS: set = {"eth", "bsc", "polygon", "arbitrum", "optimism"}
+    EVM_CHAINS: set = {"eth", "bsc", "polygon", "arbitrum", "optimism", "wemix"}
 
 
 settings = Settings()

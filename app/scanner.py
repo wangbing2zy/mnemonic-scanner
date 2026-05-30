@@ -61,14 +61,14 @@ def _derive_addresses_single(mnemonic_text: str) -> dict:
         try:
             acct = Account.from_mnemonic(mnemonic_text, account_path="m/44'/60'/0'/0/0")
             eth_addr = acct.address
-            for chain in ["eth", "bsc", "polygon", "arbitrum", "optimism"]:
+            for chain in settings.EVM_CHAINS:
                 result["addresses"][chain] = {
                     "address": eth_addr,
                     "path": "m/44'/60'/0'/0/0",
                 }
         except Exception as e:
             logger.warning(f"EVM derivation failed: {e}")
-            for chain in ["eth", "bsc", "polygon", "arbitrum", "optimism"]:
+            for chain in settings.EVM_CHAINS:
                 result["addresses"][chain] = None
 
         # === Bitcoin ===
