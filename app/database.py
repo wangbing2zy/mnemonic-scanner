@@ -76,7 +76,7 @@ class ScanJob(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     status = Column(String(20), default="pending", index=True)
-    # pending, running_derivation, running_checking, completed, cancelled, error
+    # pending, running_derivation, running_checking, running_generating, completed, cancelled, error
 
     chains = Column(Text, nullable=False, default="[]")  # JSON array
     concurrency = Column(Integer, default=10)
@@ -87,6 +87,13 @@ class ScanJob(Base):
     checked_count = Column(Integer, default=0)
     found_count = Column(Integer, default=0)
     error_count = Column(Integer, default=0)
+
+    # For auto-generate mode
+    generated_count = Column(Integer, default=0)
+    generated_total = Column(Integer, default=0)  # 0 = unlimited
+    stop_on_find = Column(Integer, default=0)  # boolean as int
+    word_count = Column(Integer, default=12)  # 12 or 24
+    speed = Column(Integer, default=0)  # generated/second
 
     current_phase = Column(String(50), nullable=True)  # derivation / checking / done
     current_message = Column(Text, nullable=True)
@@ -105,23 +112,26 @@ class ScanJob(Base):
 
     def progress_pct(self):
         """Calculate overall progress percentage."""
-        if self.status == "completed":
+        if self.status in ("completed",):
             return 100.0
+
+        if self.current_phase == "generating":
+            if self.generated_total > 0:
+                return round((self.generated_count / self.generated_total) * 100, 1)
+            return 0.0
+
         if self.total_mnemonics == 0:
             return 0.0
 
         if self.current_phase == "derivation":
             return round((self.derived_count / self.total_mnemonics) * 50, 1)
         elif self.current_phase in ("checking",):
-            # 50% for derivation, 50% for checking
             base = 50.0
             total_to_check = self.derived_count * len(self.get_chains())
             if total_to_check > 0:
                 check_pct = (self.checked_count / total_to_check) * 50
                 return round(base + check_pct, 1)
             return base
-        elif self.status == "completed":
-            return 100.0
 
         return 0.0
 
@@ -136,6 +146,11 @@ class ScanJob(Base):
             "checked": self.checked_count,
             "found": self.found_count,
             "errors": self.error_count,
+            "generated": self.generated_count,
+            "generated_total": self.generated_total,
+            "stop_on_find": self.stop_on_find,
+            "word_count": self.word_count,
+            "speed": self.speed,
             "phase": self.current_phase or "",
             "message": self.current_message or "",
             "progress": self.progress_pct(),

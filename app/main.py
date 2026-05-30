@@ -108,6 +108,18 @@ async def results_page(request: Request,
     )
 
 
+@app.get("/generate", response_class=HTMLResponse)
+async def generate_page(request: Request):
+    """Auto-generate mnemonics page."""
+    return templates.TemplateResponse(
+        "generate.html",
+        {
+            "request": request,
+            "chains": settings.CHAIN_NAMES,
+        },
+    )
+
+
 # ---- REST API ----
 
 @app.post("/api/upload")
@@ -200,6 +212,48 @@ async def api_start_scan(chains: str = Form(...),
     asyncio.create_task(scan_manager.start_scan(job_id, chain_list, concurrency))
 
     return {"success": True, "job_id": job_id, "total_mnemonics": total}
+
+
+@app.post("/api/scan/generate")
+async def api_start_generate(chains: str = Form(...),
+                              concurrency: int = Form(10),
+                              count: int = Form(100),
+                              word_count: int = Form(12),
+                              stop_on_find: int = Form(0)):
+    """Start auto-generating and scanning mnemonics."""
+    chain_list = json.loads(chains)
+    if not chain_list:
+        raise HTTPException(status_code=400, detail="Select at least one chain")
+    for c in chain_list:
+        if c not in settings.CHAIN_NAMES:
+            raise HTTPException(status_code=400, detail=f"Unknown chain: {c}")
+    if word_count not in (12, 24):
+        raise HTTPException(status_code=400, detail="Word count must be 12 or 24")
+
+    db = get_db()
+    job = ScanJob(
+        status="running_generating",
+        total_mnemonics=0,
+        concurrency=concurrency,
+        generated_count=0,
+        generated_total=count,
+        stop_on_find=stop_on_find,
+        word_count=word_count,
+        current_phase="generating",
+        current_message="Starting generation...",
+    )
+    job.set_chains(chain_list)
+    db.add(job)
+    db.commit()
+    job_id = job.id
+    db.close()
+
+    asyncio.create_task(
+        scan_manager.start_generating(job_id, chain_list, concurrency,
+                                       count, word_count, bool(stop_on_find))
+    )
+
+    return {"success": True, "job_id": job_id, "count": count}
 
 
 @app.post("/api/scan/{job_id}/stop")

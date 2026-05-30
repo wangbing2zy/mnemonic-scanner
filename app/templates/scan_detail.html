@@ -16,7 +16,7 @@
             <div class="card-body text-center py-5">
                 <!-- Status icon -->
                 <div id="statusIcon">
-                    {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+                    {% if job.status == 'running_derivation' or job.status == 'running_checking' or job.status == 'running_generating' %}
                     <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;" role="status"></div>
                     {% elif job.status == 'completed' %}
                     <i class="bi bi-check-circle text-success mb-3" style="font-size:3rem;"></i>
@@ -32,6 +32,7 @@
                 <h4 id="statusText" class="mb-1">
                     {% if job.status == 'running_derivation' %}正在派生地址...
                     {% elif job.status == 'running_checking' %}正在检查余额...
+                    {% elif job.status == 'running_generating' %}正在生成助记词...
                     {% elif job.status == 'completed' %}扫描完成！
                     {% elif job.status == 'cancelled' %}已取消
                     {% elif job.status == 'error' %}扫描出错
@@ -79,6 +80,7 @@
                     <span class="badge bg-secondary" id="phaseLabel">
                         {% if job.phase == 'derivation' %}🔨 地址派生阶段
                         {% elif job.phase == 'checking' %}🔍 余额检查阶段
+                        {% elif job.phase == 'generating' %}🎲 自动生成阶段
                         {% elif job.phase == 'done' %}✅ 已完成
                         {% else %}⏳ 等待中{% endif %}
                     </span>
@@ -91,7 +93,7 @@
 
         <!-- Action buttons -->
         <div class="text-center mb-4" id="actionButtons">
-            {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+            {% if job.status == 'running_derivation' or job.status == 'running_checking' or job.status == 'running_generating' %}
             <button class="btn btn-danger" onclick="stopScan()">
                 <i class="bi bi-stop-fill me-1"></i>停止扫描
             </button>
@@ -188,6 +190,7 @@ function updateUI(data) {
     const phaseLabels = {
         'derivation': '🔨 地址派生阶段',
         'checking': '🔍 余额检查阶段',
+        'generating': '🎲 自动生成阶段',
         'done': '✅ 已完成',
     };
     document.getElementById('phaseLabel').textContent = phaseLabels[data.phase] || '⏳ ' + data.phase;
@@ -196,6 +199,7 @@ function updateUI(data) {
     const statusTexts = {
         'running_derivation': '正在派生地址...',
         'running_checking': '正在检查余额...',
+        'running_generating': '正在生成助记词...',
         'completed': '🎉 扫描完成！',
         'cancelled': '已取消',
         'error': '扫描出错',
@@ -245,7 +249,7 @@ async function stopScan() {
 }
 
 // Connect SSE on page load
-{% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+{% if job.status == 'running_derivation' or job.status == 'running_checking' or job.status == 'running_generating' %}
 connectSSE();
 {% endif %}
 </script>

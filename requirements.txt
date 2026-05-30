@@ -11,4 +11,3 @@ aiohttp==3.10.5
 httpx==0.27.2
 base58==2.1.1
 solders==0.21.0
-python-multipart

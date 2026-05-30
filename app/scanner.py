@@ -61,14 +61,14 @@ def _derive_addresses_single(mnemonic_text: str) -> dict:
         try:
             acct = Account.from_mnemonic(mnemonic_text, account_path="m/44'/60'/0'/0/0")
             eth_addr = acct.address
-            for chain in settings.EVM_CHAINS:
+            for chain in ["eth", "bsc", "polygon", "arbitrum", "optimism", "wemix"]:
                 result["addresses"][chain] = {
                     "address": eth_addr,
                     "path": "m/44'/60'/0'/0/0",
                 }
         except Exception as e:
             logger.warning(f"EVM derivation failed: {e}")
-            for chain in settings.EVM_CHAINS:
+            for chain in ["eth", "bsc", "polygon", "arbitrum", "optimism", "wemix"]:
                 result["addresses"][chain] = None
 
         # === Bitcoin ===
@@ -706,3 +706,137 @@ class ScanManager:
 
 # Singleton
 scan_manager = ScanManager()
+
+
+# ============================================================
+# Part 4: Auto-Generate Mode
+# ============================================================
+
+async def generate_and_scan_continuously(job_id: int, chains: list, concurrency: int,
+                                          count: int, word_count: int, stop_on_find: bool,
+                                          batch_size: int = 50):
+    """Generate random mnemonics and scan them in a continuous loop."""
+    from mnemonic import Mnemonic as MnemonicLib
+
+    mnemo_gen = MnemonicLib("english")
+    strength = 128 if word_count == 12 else 256
+    total_generated = 0
+    start_time = time.time()
+
+    while True:
+        # Check cancellation
+        db = get_db()
+        job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+        if not job or job.status == "cancelled":
+            db.close()
+            return
+        db.close()
+
+        # Check if target reached
+        if count > 0 and total_generated >= count:
+            db = get_db()
+            job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+            if job:
+                job.status = "completed"
+                job.current_phase = "done"
+                job.speed = int(total_generated / (time.time() - start_time)) if time.time() - start_time > 0 else 0
+                job.current_message = f"Completed! Generated {total_generated} mnemonics."
+                db.commit()
+            db.close()
+            return
+
+        # Generate a batch of mnemonics
+        batch = []
+        for _ in range(batch_size):
+            if count > 0 and total_generated + len(batch) >= count:
+                break
+            try:
+                m_text = mnemo_gen.generate(strength=strength)
+                batch.append(m_text)
+            except Exception as e:
+                logger.error(f"Generation error: {e}")
+                continue
+
+        if not batch:
+            await asyncio.sleep(0.5)
+            continue
+
+        # Save to DB
+        db = get_db()
+        for m_text in batch:
+            existing = db.query(Mnemonic).filter(Mnemonic.mnemonic == m_text).first()
+            if not existing:
+                db.add(Mnemonic(mnemonic=m_text))
+        db.commit()
+        db.close()
+
+        total_generated += len(batch)
+
+        # Update job stats
+        elapsed = time.time() - start_time
+        speed = int(total_generated / elapsed) if elapsed > 0 else 0
+
+        db = get_db()
+        job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+        if job:
+            job.status = "running_generating"
+            job.generated_count = total_generated
+            job.speed = speed
+            job.total_mnemonics = total_generated
+            job.current_phase = "generating"
+            job.current_message = f"Generated {total_generated} ({speed}/s), checking..."
+            db.commit()
+        db.close()
+
+        # Derive addresses (existing sync function via thread pool)
+        loop = asyncio.get_event_loop()
+        db = get_db()
+        derive_texts = [m.mnemonic for m in db.query(Mnemonic).filter(Mnemonic.status == "pending").all()]
+        db.close()
+
+        if derive_texts:
+            await loop.run_in_executor(None, derive_addresses_batch, derive_texts, job_id)
+
+        # Check balances (existing async function)
+        await check_balances_async(job_id, chains, concurrency)
+
+        # check_balances_async sets status to "completed" - reset if continuing
+        if count == 0 or total_generated < count:
+            db = get_db()
+            job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+            if job and job.status == "completed":
+                job.status = "running_generating"
+                db.commit()
+            db.close()
+
+        # Check stop_on_find
+        if stop_on_find:
+            db = get_db()
+            found_count = db.query(func.count(Address.id)).filter(Address.has_funds == True).scalar()
+            if found_count > 0:
+                job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
+                if job:
+                    job.status = "completed"
+                    job.current_phase = "done"
+                    job.speed = speed
+                    job.current_message = f"Found wallet with funds! Stopped after {total_generated} mnemonics."
+                    job.found_count = found_count
+                    db.commit()
+                db.close()
+                logger.info(f"Generation stopped: found {found_count} wallet(s) with funds")
+                return
+            db.close()
+
+        # Brief yield to avoid hammering
+        await asyncio.sleep(0.1)
+
+
+# Extend ScanManager with generation support
+async def _start_generating_impl(job_id: int, chains: list, concurrency: int,
+                                  count: int, word_count: int, stop_on_find: bool):
+    """Implementation of generation scan start."""
+    await generate_and_scan_continuously(job_id, chains, concurrency,
+                                          count, word_count, stop_on_find)
+
+
+scan_manager.start_generating = _start_generating_impl

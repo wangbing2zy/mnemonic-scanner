@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}自动生成 - 助记词批量扫描工具{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <a href="/" class="btn btn-sm btn-outline-light mb-2"><i class="bi bi-arrow-left me-1"></i>返回</a>
+        <h3><i class="bi bi-magic me-2"></i>自动生成助记词</h3>
+        <p class="text-muted-light">自动生成随机 BIP39 助记词，派生地址并检查余额，发现有钱包自动记录</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Config Card -->
+        <div class="card mb-4" id="configCard">
+            <div class="card-header"><i class="bi bi-gear me-1"></i>生成配置</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">生成数量</label>
+                        <input type="number" class="form-control" id="genCount" value="1000" min="0">
+                        <small class="text-muted-light">0 = 无限运行</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">单词数</label>
+                        <select class="form-select" id="wordCount">
+                            <option value="12" selected>12 词</option>
+                            <option value="24">24 词</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">并发数</label>
+                        <select class="form-select" id="concurrency">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="stopOnFind" checked>
+                            <label class="form-check-label" for="stopOnFind">
+                                <i class="bi bi-flag me-1"></i>发现即停止
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-3">
+                    <label class="form-label fw-bold">目标链</label>
+                    <div class="row g-2" id="chainSelector">
+                        {% for key, name in chains.items() %}
+                        <div class="col-md-3 col-6">
+                            <div class="card chain-select-card text-center p-2 selected" data-chain="{{ key }}"
+                                 onclick="toggleChain(this)">
+                                <div class="py-1">
+                                    <span class="badge-chain badge-{{ key }}">{{ key|upper }}</span>
+                                    <small class="d-block mt-1 text-muted-light">{{ name }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button class="btn btn-primary btn-lg flex-fill" id="startBtn" onclick="startGen()">
+                        <i class="bi bi-play-fill me-1"></i>开始生成
+                    </button>
+                    <button class="btn btn-danger btn-lg" id="stopBtn" onclick="stopGen()" style="display:none;">
+                        <i class="bi bi-stop-fill me-1"></i>停止
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Card -->
+        <div class="card mb-4" id="progressCard" style="display:none;">
+            <div class="card-header"><i class="bi bi-activity me-1"></i>运行状态</div>
+            <div class="card-body">
+                <div class="row text-center g-3 mb-3">
+                    <div class="col-3">
+                        <div class="fs-3 fw-bold text-light" id="genGenerated">0</div>
+                        <small class="text-muted-light">已生成</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-3 fw-bold text-light" id="genChecked">0</div>
+                        <small class="text-muted-light">已检查</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-3 fw-bold balance-positive" id="genFound">0</div>
+                        <small class="text-muted-light">有钱包</small>
+                    </div>
+                    <div class="col-3">
+                        <div class="fs-3 fw-bold text-light" id="genSpeed">0</div>
+                        <small class="text-muted-light">个/秒</small>
+                    </div>
+                </div>
+
+                <div class="progress mb-3" id="genProgressBar" style="height:12px; display:none;">
+                    <div class="progress-bar" id="genProgressFill" style="width:0%;"></div>
+                </div>
+
+                <div class="d-flex justify-content-between text-muted-light small">
+                    <span id="genStatus">准备中...</span>
+                    <span id="genElapsed">00:00</span>
+                </div>
+
+                <div class="mt-3" id="genFoundList" style="display:none;">
+                    <hr>
+                    <h6><i class="bi bi-wallet2 me-1"></i>发现的地址</h6>
+                    <div class="table-responsive" style="max-height:200px; overflow-y:auto;">
+                        <table class="table table-dark table-sm mb-0">
+                            <thead><tr><th>链</th><th>地址</th><th>余额</th></tr></thead>
+                            <tbody id="genFoundTable"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Sidebar -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-info-circle me-1"></i>关于自动生成</div>
+            <div class="card-body">
+                <ul class="mb-0 text-muted-light" style="line-height:2;">
+                    <li>自动生成随机 BIP39 助记词</li>
+                    <li>支持 12 词和 24 词两种格式</li>
+                    <li>派生所有目标链地址</li>
+                    <li>通过公共 RPC 查询余额</li>
+                    <li>发现余额 > 0 的钱包立即记录</li>
+                </ul>
+                <hr class="text-muted">
+                <div class="alert alert-info py-2 small mb-0">
+                    <i class="bi bi-lightbulb me-1"></i>
+                    数量设为 <strong>0</strong> 将持续运行直到手动停止
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Jobs -->
+        <div class="card mt-3">
+            <div class="card-header"><i class="bi bi-clock-history me-1"></i>最近任务</div>
+            <div class="card-body" id="recentJobs">
+                <div class="text-center text-muted-light small py-2">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentJobId = null;
+let sseSource = null;
+let startTime = null;
+let timerInterval = null;
+
+// Chain selection
+function toggleChain(el) {
+    el.classList.toggle('selected');
+}
+
+function getSelectedChains() {
+    return Array.from(document.querySelectorAll('#chainSelector .chain-select-card.selected'))
+        .map(c => c.dataset.chain);
+}
+
+// Load recent jobs
+async function loadRecentJobs() {
+    try {
+        const resp = await fetch('/api/jobs');
+        const jobs = await resp.json();
+        const genJobs = jobs.filter(j => j.generated_total !== undefined).slice(0, 5);
+        const div = document.getElementById('recentJobs');
+
+        if (genJobs.length === 0) {
+            div.innerHTML = '<div class="text-center text-muted-light small py-2">暂无生成任务</div>';
+            return;
+        }
+
+        let html = '<div class="list-group list-group-flush">';
+        for (const j of genJobs) {
+            const statusIcon = j.status === 'completed' ? '✅' :
+                              j.status === 'running_generating' ? '🔄' :
+                              j.status === 'cancelled' ? '⏹️' : '❌';
+            html += `<div class="list-group-item bg-transparent text-light border-secondary py-2 px-0 small">
+                <div class="d-flex justify-content-between">
+                    <span>${statusIcon} #${j.id}</span>
+                    <span class="text-muted-light">${j.generated || 0} 个</span>
+                </div>
+                <div class="text-muted-light">
+                    找到 <span class="balance-positive">${j.found || 0}</span> 个 · ${j.status}
+                </div>
+            </div>`;
+        }
+        html += '</div>';
+        div.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// Start generation
+async function startGen() {
+    const chains = getSelectedChains();
+    if (chains.length === 0) {
+        alert('请至少选择一条目标链');
+        return;
+    }
+
+    const count = parseInt(document.getElementById('genCount').value) || 0;
+    const wordCount = parseInt(document.getElementById('wordCount').value);
+    const concurrency = parseInt(document.getElementById('concurrency').value);
+    const stopOnFind = document.getElementById('stopOnFind').checked ? 1 : 0;
+
+    // Validate
+    if (count < 0) { alert('数量不能为负数'); return; }
+    if (count > 0 && count < 10) {
+        if (!confirm('数量较少（' + count + '个），可能很快完成，确定继续？')) return;
+    }
+
+    const formData = new FormData();
+    formData.append('chains', JSON.stringify(chains));
+    formData.append('count', count);
+    formData.append('word_count', wordCount);
+    formData.append('concurrency', concurrency);
+    formData.append('stop_on_find', stopOnFind);
+
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> 启动中...';
+
+    try {
+        const resp = await fetch('/api/scan/generate', { method: 'POST', body: formData });
+        const data = await resp.json();
+
+        if (data.success) {
+            currentJobId = data.job_id;
+            startTime = Date.now();
+            document.getElementById('configCard').style.display = 'none';
+            document.getElementById('progressCard').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'block';
+
+            // Show progress bar if count > 0
+            if (count > 0) {
+                document.getElementById('genProgressBar').style.display = 'block';
+            }
+
+            connectSSE(currentJobId);
+            timerInterval = setInterval(updateTimer, 1000);
+        } else {
+            alert(data.detail || '启动失败');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>开始生成';
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>开始生成';
+    }
+}
+
+// Stop generation
+async function stopGen() {
+    if (!currentJobId || !confirm('确定停止？')) return;
+
+    try {
+        await fetch(`/api/scan/${currentJobId}/stop`, { method: 'POST' });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// SSE
+function connectSSE(jobId) {
+    if (sseSource) sseSource.close();
+
+    sseSource = new EventSource(`/api/scan/${jobId}/stream`);
+    sseSource.onmessage = function(event) {
+        try {
+            const d = JSON.parse(event.data);
+            updateGenUI(d);
+        } catch (e) {}
+    };
+    sseSource.onerror = function() {
+        sseSource.close();
+    };
+}
+
+function updateGenUI(d) {
+    document.getElementById('genGenerated').textContent = d.generated || 0;
+    document.getElementById('genChecked').textContent = d.checked || 0;
+    document.getElementById('genFound').textContent = d.found || 0;
+    document.getElementById('genSpeed').textContent = d.speed || 0;
+    document.getElementById('genStatus').textContent = d.message || '';
+
+    // Progress bar
+    if (d.generated_total > 0) {
+        const pct = Math.min(100, ((d.generated || 0) / d.generated_total) * 100);
+        document.getElementById('genProgressFill').style.width = pct + '%';
+    }
+
+    // Found list
+    const foundTable = document.getElementById('genFoundTable');
+    if (d.found > 0 && foundTable.children.length === 0) {
+        document.getElementById('genFoundList').style.display = 'block';
+        // Load found wallets
+        fetchResults();
+    }
+
+    // Completed
+    if (d.status === 'completed' || d.status === 'cancelled' || d.status === 'error') {
+        if (sseSource) sseSource.close();
+        if (timerInterval) clearInterval(timerInterval);
+
+        document.getElementById('stopBtn').style.display = 'none';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>重新开始';
+
+        if (d.status === 'completed') {
+            document.getElementById('genStatus').innerHTML = '✅ ' + (d.message || '完成');
+            fetchResults(); // Load results on completion
+        } else if (d.status === 'cancelled') {
+            document.getElementById('genStatus').innerHTML = '⏹️ ' + (d.message || '已停止');
+        } else {
+            document.getElementById('genStatus').innerHTML = '❌ ' + (d.message || '出错');
+        }
+
+        loadRecentJobs();
+    }
+}
+
+async function fetchResults() {
+    if (!currentJobId) return;
+    try {
+        const resp = await fetch(`/api/results?job_id=${currentJobId}&per_page=20`);
+        const data = await resp.json();
+        const table = document.getElementById('genFoundTable');
+        table.innerHTML = '';
+        for (const r of data.results) {
+            table.innerHTML += `<tr>
+                <td><span class="badge badge-chain badge-${r.chain}">${r.chain_name}</span></td>
+                <td><code style="color:#e0e0e0;font-size:0.75rem;">${r.address.slice(0, 16)}...</code></td>
+                <td class="balance-positive">${r.balance}</td>
+            </tr>`;
+        }
+    } catch (e) {}
+}
+
+function updateTimer() {
+    if (!startTime) return;
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const m = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const s = (elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('genElapsed').textContent = `${m}:${s}`;
+}
+
+// Load recent jobs on page load
+loadRecentJobs();
+</script>
+{% endblock %}

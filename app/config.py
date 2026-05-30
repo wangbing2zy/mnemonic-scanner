@@ -32,11 +32,12 @@ class Settings:
     ARBITRUM_RPC: str = os.getenv("ARBITRUM_RPC", "https://arb1.arbitrum.io/rpc")
     OPTIMISM_RPC: str = os.getenv("OPTIMISM_RPC", "https://mainnet.optimism.io")
 
-    WEMIX_RPC: str = os.getenv("WEMIX_RPC", "https://api.wemix.com")
-
     BLOCKSTREAM_API: str = os.getenv("BLOCKSTREAM_API", "https://blockstream.info/api")
     SOLANA_RPC: str = os.getenv("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
     TRON_GRID_API: str = os.getenv("TRON_GRID_API", "https://api.trongrid.io")
+
+    # WEMIX
+    WEMIX_RPC: str = os.getenv("WEMIX_RPC", "https://api.wemix.com")
 
     # Chain display names
     CHAIN_NAMES: dict = {
@@ -45,7 +46,7 @@ class Settings:
         "polygon": "Polygon",
         "arbitrum": "Arbitrum",
         "optimism": "Optimism",
-        "wemix": "WEMIX3.0",
+        "wemix": "WEMIX",
         "btc": "Bitcoin",
         "sol": "Solana",
         "trx": "TRON",
@@ -68,7 +69,7 @@ class Settings:
         "polygon": 60,  # Polygon uses same path as ETH
         "arbitrum": 60,
         "optimism": 60,
-        "wemix": 60,
+        "wemix": 60,    # WEMIX uses same path as ETH (EVM)
         "btc": 0,
         "sol": 501,
         "trx": 195,

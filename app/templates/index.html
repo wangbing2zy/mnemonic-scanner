@@ -102,7 +102,7 @@
                                 <td>
                                     {% if job.status == 'completed' %}
                                     <span class="badge bg-success">完成</span>
-                                    {% elif job.status == 'running_derivation' or job.status == 'running_checking' %}
+                                    {% elif job.status == 'running_derivation' or job.status == 'running_checking' or job.status == 'running_generating' %}
                                     <span class="badge bg-primary scanning-pulse">运行中</span>
                                     {% elif job.status == 'cancelled' %}
                                     <span class="badge bg-warning text-dark">已取消</span>
@@ -128,7 +128,7 @@
                                 </td>
                                 <td><small class="text-muted-light">{{ job.created_at[:19] if job.created_at else '-' }}</small></td>
                                 <td>
-                                    {% if job.status == 'running_derivation' or job.status == 'running_checking' %}
+                                    {% if job.status == 'running_derivation' or job.status == 'running_checking' or job.status == 'running_generating' %}
                                     <a href="/scan/{{ job.id }}" class="btn btn-sm btn-outline-light">查看</a>
                                     {% elif job.status == 'completed' %}
                                     <a href="/results?job_id={{ job.id }}" class="btn btn-sm btn-outline-light">结果</a>
